@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>PDF Translator System Diagram</title>
+    <script type="module">
+        import mermaid from "https://cdn.jsdelivr.net/npm/mermaid@10.9.0/dist/mermaid.esm.min.mjs";
+        mermaid.initialize({ startOnLoad: true });
+    </script>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 40px;
+            background-color: #f4f4f4;
+        }
+        .container {
+            background-color: white;
+            padding: 30px;
+            border-radius: 10px;
+            box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+            max-width: 1000px;
+            margin: auto;
+        }
+        h1 {
+            color: #2c3e50;
+        }
+        h2 {
+            color: #34495e;
+        }
+        p {
+            font-size: 16px;
+            color: #333;
+        }
+        ul {
+            padding-left: 20px;
+        }
+    </style>
+</head>
+<body>
+<div class="container">
+    <h1>PDF Translator System Diagram</h1>
+    <p>This diagram illustrates the system architecture and workflow of a PDF translation application using OCR and text translation technologies.</p>
+    <div class="mermaid">
+        graph TD
+            A([Start App]) --> B[User selects PDF file and language options]
+            B --> C[Verify file and initialize GUI]
+            C --> D[Start PDF Translation Thread]
+            D --> E[Loop through PDF pages]
+            E --> F[Load page with PyMuPDF]
+            F --> G[Convert page to PIL image]
+            G --> H[Perform OCR with Tesseract]
+            H --> I[Translate text using GoogleTranslator]
+            I --> J[Clear original text from image]
+            J --> K[Draw translated text on image]
+            K --> L[Update GUI with preview and progress]
+            L --> M{More pages?}
+            M -- Yes --> E
+            M -- No --> N[Save final images to PDF file]
+            N --> O([Done])
+
+        style A fill:#27ae60,stroke:#fff,stroke-width:2px
+        style B fill:#2980b9,stroke:#fff,stroke-width:2px
+        style C fill:#3498db,stroke:#fff,stroke-width:2px
+        style D fill:#9b59b6,stroke:#fff,stroke-width:2px
+        style E fill:#f39c12,stroke:#fff,stroke-width:2px
+        style F fill:#f39c12,stroke:#fff,stroke-width:2px
+        style G fill:#f39c12,stroke:#fff,stroke-width:2px
+        style H fill:#e67e22,stroke:#fff,stroke-width:2px
+        style I fill:#e74c3c,stroke:#fff,stroke-width:2px
+        style J fill:#1abc9c,stroke:#fff,stroke-width:2px
+        style K fill:#1abc9c,stroke:#fff,stroke-width:2px
+        style L fill:#2ecc71,stroke:#fff,stroke-width:2px
+        style M fill:#95a5a6,stroke:#fff,stroke-width:2px
+        style N fill:#16a085,stroke:#fff,stroke-width:2px
+        style O fill:#27ae60,stroke:#fff,stroke-width:2px
+    </div>
+    <br>
+    <h2>Explanation of the Workflow</h2>
+    <ul>
+        <li><strong>Start App</strong>: User opens the application.</li>
+        <li><strong>Select PDF & Options</strong>: User picks the input PDF and sets translation options.</li>
+        <li><strong>Initialize GUI</strong>: The system sets up the interface and prepares for processing.</li>
+        <li><strong>Translation Thread</strong>: A separate thread handles heavy processing to keep GUI responsive.</li>
+        <li><strong>Page Loop</strong>: Each page goes through image conversion, OCR, translation, and redrawing.</li>
+        <li><strong>Final Output</strong>: All translated pages are compiled and saved as a new PDF.</li>
+    </ul>
+</div>
+</body>
+</html>
