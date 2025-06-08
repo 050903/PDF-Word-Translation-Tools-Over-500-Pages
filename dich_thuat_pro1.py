@@ -4,6 +4,7 @@ import threading
 import os
 import time
 import datetime
+import io
 
 # Các thư viện xử lý file, ảnh và dịch thuật
 import fitz  # PyMuPDF
@@ -13,7 +14,7 @@ from deep_translator import GoogleTranslator
 
 # --- CẤU HÌNH QUAN TRỌNG ---
 try:
-    pytesseract.pytesseract.tesseract_cmd = r'D:\Program Files\Tesseract-OCR\tesseract.exe'
+    pytesseract.pytesseract.tesseract_cmd = r'C:\Program Files\Tesseract-OCR\tesseract.exe'
     FONT_PATH = "arial.ttf"
 except Exception:
     print("LƯU Ý: Không tìm thấy Tesseract hoặc font Arial. Vui lòng chỉnh sửa đường dẫn trong code.")
@@ -23,6 +24,7 @@ except Exception:
 
 def draw_text_with_wrapping(draw, text, box, font_path):
     x, y, w, h = box
+    font = ImageFont.load_default()
     font_size = int(h * 0.95) 
     
     while font_size > 5:
@@ -119,18 +121,11 @@ def run_visual_translation_process(input_path, target_lang, quality_dpi, status_
                         
                         boxes_to_process.append({'box': (x, y, w, h), 'text': translated_text})
 
-            # ==================================================================
-            # ĐOẠN MÃ ĐÃ SỬA LỖI
-            # ==================================================================
             status_callback("Bước 4: Tái tạo lại trang đã dịch...")
             for item in boxes_to_process:
                 (x, y, w, h) = item['box']
-                # SỬA LỖI: Chuyển đổi tọa độ từ (x, y, w, h) sang [x0, y0, x1, y1]
                 draw.rectangle([x, y, x + w, y + h], fill='white', outline='white')
-                
-                # Hàm vẽ chữ vẫn dùng định dạng (x, y, w, h) như cũ
                 draw_text_with_wrapping(draw, item['text'], item['box'], FONT_PATH)
-            # ==================================================================
 
             status_callback("Bước 5: Cập nhật giao diện...")
             image_update_callback(img)
@@ -138,12 +133,34 @@ def run_visual_translation_process(input_path, target_lang, quality_dpi, status_
             progress_callback(page_num + 1)
             time.sleep(0.1)
 
+        # ==================================================================
+        # THAY ĐỔI LỚN: SỬ DỤNG PYMUPDF ĐỂ LƯU FILE, ĐẢM BẢO ỔN ĐỊNH
+        # ==================================================================
         if translated_pages_images:
-            status_callback("Bước 6: Lưu tất cả các trang đã dịch vào file PDF mới...")
+            status_callback("Bước 6: Bắt đầu lưu file PDF mới (phương pháp ổn định)...")
             base, _ = os.path.splitext(input_path)
-            output_path = f"{base}_dich_visual_v5.1.pdf"
+            # Bạn có thể đổi tên file ở đây nếu muốn
+            output_path = f"{base}_translated.pdf" 
             
-            translated_pages_images[0].save(output_path, save_all=True, append_images=translated_pages_images[1:])
+            output_doc = fitz.open() # Tạo một file PDF trắng
+            
+            for i, img in enumerate(translated_pages_images):
+                status_callback(f"Đang ghép trang {i+1}/{len(translated_pages_images)} vào PDF...")
+                
+                # Chuyển ảnh từ Pillow sang dạng bytes mà PyMuPDF có thể đọc
+                img_bytes = io.BytesIO()
+                img.save(img_bytes, format='PNG')
+                img_bytes.seek(0)
+
+                # Tạo trang mới và chèn ảnh vào
+                page_rect = fitz.Rect(0, 0, img.width, img.height)
+                new_page = output_doc.new_page(width=img.width, height=img.height)
+                new_page.insert_image(page_rect, stream=img_bytes)
+
+            # Lưu file PDF đã hoàn chỉnh
+            output_doc.save(output_path)
+            output_doc.close()
+            
             status_callback(f"--- HOÀN THÀNH! ---")
             status_callback(f"Đã lưu thành công vào file: {output_path}")
             messagebox.showinfo("Thành công", f"Đã dịch và lưu file thành công!\n\nFile được lưu tại: {output_path}")
@@ -160,7 +177,7 @@ def run_visual_translation_process(input_path, target_lang, quality_dpi, status_
 class TranslatorApp:
     def __init__(self, root):
         self.root = root
-        self.root.title("Công cụ Dịch Thuật Chuyên Nghiệp (v5.1 - Sửa lỗi tọa độ)")
+        self.root.title("Professional Translation Tool (v5.3 - Stable Save)")
         self.root.geometry("850x800")
 
         main_frame = ttk.Frame(self.root, padding="10")
@@ -172,14 +189,14 @@ class TranslatorApp:
         control_frame.grid(row=0, column=0, sticky="ew", padx=5, pady=5)
         control_frame.columnconfigure(0, weight=1)
 
-        file_frame = ttk.LabelFrame(control_frame, text="Bước 1: Chọn File PDF")
+        file_frame = ttk.LabelFrame(control_frame, text="Step 1: Choose PDF File")
         file_frame.grid(row=0, column=0, sticky="ew", pady=5)
         file_frame.columnconfigure(0, weight=1)
         
         self.filepath_var = tk.StringVar()
         self.filepath_entry = ttk.Entry(file_frame, textvariable=self.filepath_var, state="readonly")
         self.filepath_entry.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=5, pady=5)
-        self.browse_button = ttk.Button(file_frame, text="Chọn File...", command=self.select_file)
+        self.browse_button = ttk.Button(file_frame, text="Browse...", command=self.select_file)
         self.browse_button.pack(side=tk.LEFT, padx=5, pady=5)
 
         settings_frame = ttk.Frame(control_frame)
@@ -187,55 +204,55 @@ class TranslatorApp:
         settings_frame.columnconfigure(0, weight=1)
         settings_frame.columnconfigure(1, weight=1)
 
-        lang_frame = ttk.LabelFrame(settings_frame, text="Bước 2: Chọn Ngôn Ngữ Đích")
+        lang_frame = ttk.LabelFrame(settings_frame, text="Step 2: Select Target Language")
         lang_frame.grid(row=0, column=0, sticky="nsew", padx=5)
-        self.languages = {"Tiếng Việt": "vi", "Tiếng Anh": "en", "Tiếng Nhật": "ja", "Tiếng Hàn": "ko", "Tiếng Trung (Giản thể)": "zh-cn"}
-        self.lang_var = tk.StringVar(value="Tiếng Việt")
+        self.languages = {"Vietnamese": "vi", "English": "en", "Japanese": "ja", "Korean": "ko", "Chinese (Simplified)": "zh-cn"}
+        self.lang_var = tk.StringVar(value="Vietnamese")
         lang_menu = ttk.Combobox(lang_frame, textvariable=self.lang_var, values=list(self.languages.keys()), state="readonly")
         lang_menu.pack(padx=5, pady=5, fill=tk.X)
 
-        quality_frame = ttk.LabelFrame(settings_frame, text="Bước 3: Chọn Chất lượng vs. Tốc độ")
+        quality_frame = ttk.LabelFrame(settings_frame, text="Step 3: Select Quality vs. Speed")
         quality_frame.grid(row=0, column=1, sticky="nsew", padx=5)
-        self.quality_var = tk.StringVar(value="Cân bằng")
-        modes = {"Nhanh (150 DPI)": 150, "Cân bằng (200 DPI)": 200, "Chất lượng cao (300 DPI)": 300}
+        self.quality_var = tk.StringVar(value="Balanced")
+        modes = {"Fast (150 DPI)": 150, "Balanced (200 DPI)": 200, "High Quality (300 DPI)": 300}
         for (text, value) in modes.items():
             ttk.Radiobutton(quality_frame, text=text, variable=self.quality_var, value=text.split(' ')[0]).pack(anchor=tk.W, padx=5)
         self.quality_map = {key.split(' ')[0]: value for key, value in modes.items()}
 
-        self.start_button = ttk.Button(control_frame, text="Bước 4: Bắt Đầu Dịch", command=self.start_translation_thread, style="Accent.TButton")
+        self.start_button = ttk.Button(control_frame, text="Step 4: Start Translation", command=self.start_translation_thread, style="Accent.TButton")
         self.start_button.grid(row=2, column=0, pady=10, ipady=5, sticky="ew")
         style = ttk.Style()
         style.configure("Accent.TButton", font=("Segoe UI", 10, "bold"))
 
-        stats_panel = ttk.LabelFrame(main_frame, text="Thông số")
+        stats_panel = ttk.LabelFrame(main_frame, text="Statistics")
         stats_panel.grid(row=1, column=0, sticky="ew", padx=5, pady=5)
         stats_panel.columnconfigure(0, weight=1)
         stats_panel.columnconfigure(1, weight=1)
         stats_panel.columnconfigure(2, weight=1)
         stats_panel.columnconfigure(3, weight=1)
 
-        self.filesize_var = tk.StringVar(value="Dung lượng: N/A")
+        self.filesize_var = tk.StringVar(value="Size: N/A")
         ttk.Label(stats_panel, textvariable=self.filesize_var).grid(row=0, column=0, padx=5, pady=2, sticky="w")
-        self.page_var = tk.StringVar(value="Trang: N/A")
+        self.page_var = tk.StringVar(value="Page: N/A")
         ttk.Label(stats_panel, textvariable=self.page_var).grid(row=0, column=1, padx=5, pady=2, sticky="w")
-        self.elapsed_var = tk.StringVar(value="Thời gian trôi qua: 0:00:00")
+        self.elapsed_var = tk.StringVar(value="Elapsed: 0:00:00")
         ttk.Label(stats_panel, textvariable=self.elapsed_var).grid(row=0, column=2, padx=5, pady=2, sticky="w")
-        self.etr_var = tk.StringVar(value="Ước tính còn lại: N/A")
+        self.etr_var = tk.StringVar(value="ETR: N/A")
         ttk.Label(stats_panel, textvariable=self.etr_var).grid(row=0, column=3, padx=5, pady=2, sticky="w")
 
-        log_frame = ttk.LabelFrame(main_frame, text="Nhật ký chi tiết")
+        log_frame = ttk.LabelFrame(main_frame, text="Detailed Log")
         log_frame.grid(row=2, column=0, sticky="ew", padx=5, pady=5)
         self.log_text = tk.Text(log_frame, wrap=tk.WORD, state="disabled", height=5)
         self.log_text.pack(fill=tk.X, expand=True)
 
-        progress_frame = ttk.LabelFrame(main_frame, text="Tiến Độ Tổng Thể")
+        progress_frame = ttk.LabelFrame(main_frame, text="Overall Progress")
         progress_frame.grid(row=3, column=0, sticky="ew", padx=5, pady=5)
         self.progress_bar = ttk.Progressbar(progress_frame, orient="horizontal", mode="determinate")
         self.progress_bar.pack(fill=tk.X, expand=True, padx=5, pady=5)
 
-        image_frame = ttk.LabelFrame(main_frame, text="Xem Trực Tiếp")
+        image_frame = ttk.LabelFrame(main_frame, text="Live Preview")
         image_frame.grid(row=4, column=0, sticky="nsew", padx=5, pady=5)
-        self.image_label = ttk.Label(image_frame, text="Bản dịch sẽ được hiển thị ở đây...")
+        self.image_label = ttk.Label(image_frame, text="The translated page will be displayed here...")
         self.image_label.pack(expand=True)
         self.photo = None
 
@@ -260,23 +277,23 @@ class TranslatorApp:
         self.progress_bar['value'] = value
 
     def update_stats(self, stats_dict):
-        self.page_var.set(f"Trang: {stats_dict.get('page', 'N/A')}")
-        self.elapsed_var.set(f"Thời gian trôi qua: {stats_dict.get('elapsed', '0:00:00')}")
-        self.etr_var.set(f"Ước tính còn lại: {stats_dict.get('etr', 'N/A')}")
+        self.page_var.set(f"Page: {stats_dict.get('page', 'N/A')}")
+        self.elapsed_var.set(f"Elapsed: {stats_dict.get('elapsed', '0:00:00')}")
+        self.etr_var.set(f"ETR: {stats_dict.get('etr', 'N/A')}")
         self.root.update_idletasks()
 
     def select_file(self):
-        filepath = filedialog.askopenfilename(title="Chọn file PDF", filetypes=(("PDF files", "*.pdf"), ("Tất cả file", "*.*")))
+        filepath = filedialog.askopenfilename(title="Select PDF File", filetypes=(("PDF files", "*.pdf"), ("All files", "*.*")))
         if filepath:
             self.filepath_var.set(filepath)
-            self.log(f"Đã chọn file: {os.path.basename(filepath)}")
+            self.log(f"Selected file: {os.path.basename(filepath)}")
             try:
                 size_in_bytes = os.path.getsize(filepath)
                 size_in_mb = size_in_bytes / (1024 * 1024)
-                self.filesize_var.set(f"Dung lượng: {size_in_mb:.2f} MB")
+                self.filesize_var.set(f"Size: {size_in_mb:.2f} MB")
             except Exception as e:
-                self.filesize_var.set("Dung lượng: Lỗi")
-                self.log(f"Không thể lấy dung lượng file: {e}")
+                self.filesize_var.set("Size: Error")
+                self.log(f"Could not get file size: {e}")
 
     def set_ui_state(self, enabled):
         state = "normal" if enabled else "disabled"
@@ -286,7 +303,7 @@ class TranslatorApp:
     def start_translation_thread(self):
         input_path = self.filepath_var.get()
         if not input_path:
-            messagebox.showwarning("Thiếu thông tin", "Vui lòng chọn một file PDF để dịch!")
+            messagebox.showwarning("Missing Information", "Please select a PDF file to translate!")
             return
         
         try:
@@ -297,14 +314,14 @@ class TranslatorApp:
             self.progress_bar['value'] = 0
             self.update_stats({"page": f"0 / {total_pages}", "elapsed": "0:00:00", "etr": "N/A"})
         except Exception as e:
-            messagebox.showerror("Lỗi đọc file", f"Không thể đọc file PDF.\nLỗi: {e}")
+            messagebox.showerror("File Read Error", f"Could not read the PDF file.\nError: {e}")
             return
 
         target_lang_code = self.languages[self.lang_var.get()]
         quality_dpi = self.quality_map[self.quality_var.get()]
 
         self.set_ui_state(False)
-        self.log("--- BẮT ĐẦU QUÁ TRÌNH DỊCH CHUYÊN NGHIỆP ---")
+        self.log("--- STARTING PROFESSIONAL TRANSLATION PROCESS ---")
 
         thread = threading.Thread(
             target=run_visual_translation_process,
